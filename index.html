@@ -145,7 +145,27 @@ body,select,input,option,div,span,h1,h2,h3,h4,p,button,textarea{font-family:'72 
     </div>
 
     <div id='view-reports' class='hidden'>
-      <div id='reports-list' class='grid md:grid-cols-2 gap-4'></div>
+      <div class='flex items-center justify-between gap-3 mb-5 flex-wrap bg-slate-50 border border-slate-200/80 rounded-2xl p-3 sm:p-4'>
+        <div class='flex items-center gap-2 flex-wrap'>
+          <label class='lbl !mb-0 font-bold text-slate-700'>Mês de referência:</label>
+          <div class='flex items-center gap-1.5 flex-wrap'>
+            <button onclick='changeReportMonth(-1)' title='Mês anterior' class='w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-[#007A33] transition-colors'>
+              <svg class='w-3.5 h-3.5' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M15 19l-7-7 7-7'/></svg>
+            </button>
+            <input id='reports-month' type='month' class='inp !w-auto !py-1 !px-2.5 text-xs font-bold text-slate-700 cursor-pointer bg-white' oninput='setReportMonth(this.value)'>
+            <button onclick='changeReportMonth(1)' title='Próximo mês' class='w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-[#007A33] transition-colors'>
+              <svg class='w-3.5 h-3.5' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M9 5l7 7-7 7'/></svg>
+            </button>
+            <button onclick='setReportMonthToday()' class='text-[10px] font-bold uppercase tracking-wider rounded-lg px-2.5 py-1.5 transition-colors border border-[#007A33]/30 text-[#007A33] hover:bg-[#007A33]/10 bg-white'>Este mês</button>
+            <button id='btn-report-all-months' onclick='toggleReportAllMonths()' class='text-[10px] font-bold uppercase tracking-wider rounded-lg px-2.5 py-1.5 transition-colors border border-slate-200 text-slate-600 hover:text-[#007A33] hover:border-[#007A33]/40 bg-white'>Todos os meses</button>
+          </div>
+        </div>
+        <div class='flex items-center gap-2'>
+          <span id='reports-count-badge' class='text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-xl border border-slate-200'></span>
+        </div>
+      </div>
+
+      <div id='reports-list' class='space-y-6'></div>
     </div>
 
     <div id='view-summary' class='hidden'>
@@ -415,7 +435,7 @@ const DEST = {
 const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const $=id=>document.getElementById(id);
 let trips=load(KEY_TRIPS), reports=load(KEY_REPORTS);
-let currentUser=null, viewYear, viewMonth, view='calendar', teamMap=null, mapMarkers=[], lastDay=null, mapDate=null;
+let currentUser=null, viewYear, viewMonth, view='calendar', teamMap=null, mapMarkers=[], lastDay=null, mapDate=null, reportMonth=null, reportAllMonths=false;
 
 const pad=n=>String(n).padStart(2,'0');
 const toISO=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
@@ -588,6 +608,8 @@ function selectUser(nome){
 
   const n=new Date();viewYear=n.getFullYear();viewMonth=n.getMonth();
   $('summary-month').value=viewYear+'-'+pad(viewMonth+1);
+  if(!reportMonth) reportMonth=viewYear+'-'+pad(viewMonth+1);
+  if($('reports-month')) $('reports-month').value=reportMonth;
   view='calendar';
   applyView();
   renderCalendar();
@@ -1089,22 +1111,24 @@ async function fileURL(f){
   if(f.data) return f.data;
   try{const b=await getFile(f.id);return b?URL.createObjectURL(b):''}catch{return ''}
 }
-const toData = async f => {
+const toData = async (f, month) => {
   try {
-    const res = await fetch('/api/upload?name=' + encodeURIComponent(f.name) + '&type=' + encodeURIComponent(f.type), {
+    let uploadUrl = '/api/upload?name=' + encodeURIComponent(f.name) + '&type=' + encodeURIComponent(f.type);
+    if (month) uploadUrl += '&month=' + encodeURIComponent(month);
+    const res = await fetch(uploadUrl, {
       method: 'POST',
       body: f
     });
     if (res.ok) {
       const info = await res.json();
-      return { id: info.id, name: f.name, type: f.type, size: f.size, url: info.url };
+      return { id: info.id, name: f.name, type: f.type, size: f.size, url: info.url, month: info.month || month };
     }
   } catch (err) {
     console.warn('Fallback para armazenamento local:', err);
   }
   const id = uid('file');
   await putFile(id, f);
-  return { id, name: f.name, type: f.type, size: f.size };
+  return { id, name: f.name, type: f.type, size: f.size, month };
 };
 const sizeOf=list=>list.reduce((a,f)=>a+(f.size||0),0);
 
@@ -1135,7 +1159,8 @@ $('report-files').addEventListener('change',()=>{
 $('report-form').addEventListener('submit',async e=>{
   e.preventDefault();
   const tripId=$('report-trip-id').value;
-  if(!canEdit(trips.find(t=>t.id===tripId))) return showErr('report-error','Você só pode editar relatórios das suas próprias viagens.');
+  const targetTrip=trips.find(t=>t.id===tripId);
+  if(!canEdit(targetTrip)) return showErr('report-error','Você só pode editar relatórios das suas próprias viagens.');
 
   const purpose=$('report-purpose').value.trim(), experience=$('report-experience').value.trim();
   if(!purpose||!experience) return showErr('report-error','Preencha a finalidade e a experiência da viagem.');
@@ -1154,12 +1179,14 @@ $('report-form').addEventListener('submit',async e=>{
 
   try{
     const old=oldRep;
+    const tripMonth=(targetTrip?.startDate?targetTrip.startDate.slice(0,7):'')||(new Date().toISOString().slice(0,7));
     const photos=[],attachments=[];
-    for(const f of $('report-photos').files){const d=await toData(f);savedIds.push(d.id);photos.push(d)}
-    for(const f of $('report-files').files){const d=await toData(f);savedIds.push(d.id);attachments.push(d)}
+    for(const f of $('report-photos').files){const d=await toData(f, tripMonth);savedIds.push(d.id);photos.push(d)}
+    for(const f of $('report-files').files){const d=await toData(f, tripMonth);savedIds.push(d.id);attachments.push(d)}
 
     const rep={
       tripId,
+      month:tripMonth,
       purpose,
       objective:$('report-objective').value.trim(),
       experience,
@@ -1172,6 +1199,7 @@ $('report-form').addEventListener('submit',async e=>{
       updatedAt:new Date().toISOString()
     };
 
+    reportMonth=tripMonth;
     const next=[...reports.filter(r=>r.tripId!==tripId),{id:tripId,...rep}];
     save(KEY_REPORTS,next);
     reports=next;
@@ -1228,30 +1256,163 @@ async function viewReport(id){
   openModal('details-modal');
 }
 
-function renderReports(){
-  const list=[...reports].sort((a,b)=>(trips.find(t=>t.id===b.tripId)?.startDate||'').localeCompare(trips.find(t=>t.id===a.tripId)?.startDate||''));
-  if(!list.length){
-    $('reports-list').innerHTML=`<div class='md:col-span-2 border border-slate-200 rounded-2xl p-10 text-center'><p class='text-sm font-bold text-slate-700'>Nenhum relatório cadastrado</p><p class='text-xs text-slate-400 mt-1'>Abra uma viagem no calendário para preencher.</p></div>`;
-    return;
-  }
-  $('reports-list').innerHTML=list.map(r=>{
-    const t=trips.find(x=>x.id===r.tripId), c=colorFor(t?.owner);
-    return `<div class='border border-slate-200 rounded-2xl p-5 hover:border-[#007A33]/50 transition-colors'>
+function getReportMonth(r){
+  if(r.month) return r.month;
+  const t=trips.find(x=>x.id===r.tripId);
+  if(t&&t.startDate) return t.startDate.slice(0,7);
+  if(r.updatedAt) return r.updatedAt.slice(0,7);
+  return todayISO().slice(0,7);
+}
+
+function setReportMonth(val){
+  reportMonth=val;
+  reportAllMonths=false;
+  renderReports();
+}
+
+function changeReportMonth(delta){
+  if(!reportMonth) reportMonth=(viewYear||new Date().getFullYear())+'-'+pad((viewMonth!==undefined?viewMonth:new Date().getMonth())+1);
+  const [y,m]=reportMonth.split('-').map(Number);
+  const d=new Date(y, m-1+delta, 1);
+  reportMonth=d.getFullYear()+'-'+pad(d.getMonth()+1);
+  reportAllMonths=false;
+  renderReports();
+}
+
+function setReportMonthToday(){
+  const n=new Date();
+  reportMonth=n.getFullYear()+'-'+pad(n.getMonth()+1);
+  reportAllMonths=false;
+  renderReports();
+}
+
+function toggleReportAllMonths(){
+  reportAllMonths=!reportAllMonths;
+  renderReports();
+}
+
+function renderReportCard(r){
+  const t=trips.find(x=>x.id===r.tripId), c=colorFor(t?.owner);
+  const m=getReportMonth(r);
+  const [my,mm]=m.split('-').map(Number);
+  const monthName=(MESES[mm-1]||'')+' '+my;
+  const numPhotos=(r.photos||[]).length;
+  const numAtts=(r.attachments||[]).length;
+
+  return `<div class='bg-white border border-slate-200 rounded-2xl p-5 hover:border-[#007A33]/50 hover:shadow-sm transition-all flex flex-col justify-between'>
+    <div>
       <div class='flex items-center gap-3'>
-        <div class='w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-sm' style='background:${c}'>${avatarImg(t?.owner)}</div>
+        <div class='w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-sm shadow-xs flex-shrink-0' style='background:${c}'>${avatarImg(t?.owner)}</div>
         <div class='flex-1 min-w-0'>
           <p class='text-sm font-extrabold text-slate-800 truncate'>${esc(t?.title||'Viagem')}</p>
-          <p class='text-[11px] text-slate-400'>${t?fmt(t.startDate)+' a '+fmt(t.endDate):''}</p>
+          <p class='text-[11px] text-slate-400 font-medium truncate'>${t?fmt(t.startDate)+' a '+fmt(t.endDate):''}</p>
         </div>
-        <span class='text-[10px] font-bold uppercase tracking-widest text-[#007A33] bg-[#007A33]/10 rounded-full px-2 py-1'>Preenchido</span>
+        <div class='flex flex-col items-end gap-1 flex-shrink-0'>
+          <span class='text-[10px] font-bold uppercase tracking-wider text-[#007A33] bg-[#007A33]/10 rounded-full px-2 py-0.5'>Preenchido</span>
+          <span class='text-[9px] font-semibold text-slate-400'>${monthName}</span>
+        </div>
       </div>
-      <p class='text-xs text-slate-500 mt-3 line-clamp-3'>${esc(r.experience||r.purpose||'')}</p>
-      <div class='flex gap-2 mt-4'>
-        <button onclick="viewReport('${r.id}')" class='btn btn-o'>Ver</button>
-        ${canEdit(t)?`<button onclick="openReportModal('${r.tripId}')" class='btn btn-g'>Editar</button>`:''}
-      </div>
-    </div>`;
-  }).join('');
+      <p class='text-xs text-slate-600 mt-3 line-clamp-3 leading-relaxed'>${esc(r.experience||r.purpose||'')}</p>
+      ${(numPhotos>0||numAtts>0)?`
+        <div class='flex items-center gap-2 mt-3 text-[10px] text-slate-500 font-medium flex-wrap'>
+          ${numPhotos>0?`<span class='bg-slate-100 rounded-md px-2 py-0.5 flex items-center gap-1'>📷 ${numPhotos} foto${numPhotos>1?'s':''}</span>`:''}
+          ${numAtts>0?`<span class='bg-slate-100 rounded-md px-2 py-0.5 flex items-center gap-1'>📎 ${numAtts} anexo${numAtts>1?'s':''}</span>`:''}
+        </div>
+      `:''}
+    </div>
+    <div class='flex items-center gap-2 mt-4 pt-3 border-t border-slate-100'>
+      <button onclick="viewReport('${r.id}')" class='btn btn-o text-xs py-1.5 px-3'>Ver relatório</button>
+      ${canEdit(t)?`<button onclick="openReportModal('${r.tripId}')" class='btn btn-g text-xs py-1.5 px-3'>Editar</button>`:''}
+    </div>
+  </div>`;
+}
+
+function renderReports(){
+  if(!reportMonth){
+    const d=new Date();
+    reportMonth=(viewYear||d.getFullYear())+'-'+pad((viewMonth!==undefined?viewMonth:d.getMonth())+1);
+  }
+
+  const monthInput=$('reports-month');
+  if(monthInput) monthInput.value=reportMonth;
+
+  const btnAll=$('btn-report-all-months');
+  if(btnAll){
+    if(reportAllMonths){
+      btnAll.className='text-[10px] font-bold uppercase tracking-wider rounded-lg px-2.5 py-1.5 transition-colors border border-[#007A33] bg-[#007A33] text-white shadow-xs';
+    }else{
+      btnAll.className='text-[10px] font-bold uppercase tracking-wider rounded-lg px-2.5 py-1.5 transition-colors border border-slate-200 text-slate-600 hover:text-[#007A33] hover:border-[#007A33]/40 bg-white';
+    }
+  }
+
+  const container=$('reports-list');
+  const badge=$('reports-count-badge');
+  if(!container) return;
+
+  const sortedReports=[...reports].sort((a,b)=>{
+    const da=(trips.find(t=>t.id===a.tripId)?.startDate||a.updatedAt||'');
+    const db=(trips.find(t=>t.id===b.tripId)?.startDate||b.updatedAt||'');
+    return db.localeCompare(da);
+  });
+
+  if(!sortedReports.length){
+    if(badge) badge.textContent='0 relatórios';
+    container.innerHTML=`<div class='border border-slate-200 rounded-2xl p-10 text-center bg-white'><p class='text-sm font-bold text-slate-700'>Nenhum relatório cadastrado no sistema</p><p class='text-xs text-slate-400 mt-1'>Abra uma viagem no calendário para preencher o primeiro relatório.</p></div>`;
+    return;
+  }
+
+  if(reportAllMonths){
+    // Agrupar por mês
+    const groups={};
+    sortedReports.forEach(r=>{
+      const m=getReportMonth(r);
+      if(!groups[m]) groups[m]=[];
+      groups[m].push(r);
+    });
+
+    const monthKeys=Object.keys(groups).sort().reverse();
+    if(badge) badge.textContent=`Total: ${sortedReports.length} relatório${sortedReports.length>1?'s':''} em ${monthKeys.length} mês(es)`;
+
+    container.innerHTML=monthKeys.map(mKey=>{
+      const [y,m]=mKey.split('-').map(Number);
+      const label=MESES[m-1]+' de '+y;
+      const groupList=groups[mKey];
+      return `<div class='bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5'>
+        <div class='flex items-center justify-between pb-3 mb-4 border-b border-slate-200/60 flex-wrap gap-2'>
+          <div class='flex items-center gap-2'>
+            <span class='w-2.5 h-2.5 rounded-full bg-[#007A33]'></span>
+            <h3 class='text-sm font-extrabold text-slate-800 uppercase tracking-wider'>${label}</h3>
+          </div>
+          <span class='text-xs font-bold text-[#007A33] bg-[#007A33]/10 px-2.5 py-0.5 rounded-full'>${groupList.length} relatório${groupList.length>1?'s':''}</span>
+        </div>
+        <div class='grid md:grid-cols-2 gap-4'>
+          ${groupList.map(renderReportCard).join('')}
+        </div>
+      </div>`;
+    }).join('');
+  } else {
+    // Mês selecionado
+    const [y,m]=reportMonth.split('-').map(Number);
+    const label=MESES[m-1]+' de '+y;
+    const filtered=sortedReports.filter(r=>getReportMonth(r)===reportMonth);
+
+    if(badge) badge.textContent=`${filtered.length} relatório${filtered.length===1?'':'s'} em ${label}`;
+
+    if(!filtered.length){
+      container.innerHTML=`<div class='border border-slate-200 rounded-2xl p-10 text-center bg-white'>
+        <div class='w-12 h-12 mx-auto mb-3 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-xl'>📅</div>
+        <p class='text-sm font-bold text-slate-700'>Nenhum relatório em ${label}</p>
+        <p class='text-xs text-slate-400 mt-1 mb-4'>Não foram encontrados relatórios arquivados para este mês.</p>
+        <div class='flex justify-center gap-2'>
+          <button onclick='toggleReportAllMonths()' class='btn btn-o text-xs'>Ver todos os meses</button>
+          <button onclick='setReportMonthToday()' class='btn btn-g text-xs'>Ir para o mês atual</button>
+        </div>
+      </div>`;
+      return;
+    }
+
+    container.innerHTML=`<div class='grid md:grid-cols-2 gap-4'>${filtered.map(renderReportCard).join('')}</div>`;
+  }
 }
 
 /* ===== RESUMO MENSAL ===== */
@@ -1328,7 +1489,8 @@ Object.assign(window,{
   changeMonth,goToToday,setView,openTripModal,closeModal,sair,filterDest,
   openReportModal,viewReport,editTrip,deleteTrip,renderSummary,
   setMapDate,changeMapDay,resetMapToToday,toggleMapExpand,
-  quickSelect
+  quickSelect,
+  setReportMonth,changeReportMonth,setReportMonthToday,toggleReportAllMonths
 });
 
 /* Inicialização */

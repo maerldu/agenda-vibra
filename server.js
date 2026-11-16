@@ -190,8 +190,16 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && pathname === '/api/reports') {
     try {
       const body = await parseBody(req);
-      const reports = Array.isArray(body) ? body : (body.reports || []);
+      const rawReports = Array.isArray(body) ? body : (body.reports || []);
       const db = readDB();
+      const tripMap = new Map((db.trips || []).map(t => [t.id, t]));
+      const reports = rawReports.map(r => {
+        if (!r.month) {
+          const t = tripMap.get(r.tripId);
+          r.month = (t && t.startDate) ? t.startDate.slice(0, 7) : (r.updatedAt ? r.updatedAt.slice(0, 7) : new Date().toISOString().slice(0, 7));
+        }
+        return r;
+      });
       db.reports = reports;
       writeDB(db);
       return sendJSON(res, 200, { success: true, count: reports.length });
@@ -206,7 +214,16 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const db = readDB();
       if (Array.isArray(body.trips)) db.trips = body.trips;
-      if (Array.isArray(body.reports)) db.reports = body.reports;
+      if (Array.isArray(body.reports)) {
+        const tripMap = new Map((db.trips || []).map(t => [t.id, t]));
+        db.reports = body.reports.map(r => {
+          if (!r.month) {
+            const t = tripMap.get(r.tripId);
+            r.month = (t && t.startDate) ? t.startDate.slice(0, 7) : (r.updatedAt ? r.updatedAt.slice(0, 7) : new Date().toISOString().slice(0, 7));
+          }
+          return r;
+        });
+      }
       writeDB(db);
       return sendJSON(res, 200, { success: true, db });
     } catch (e) {
@@ -214,14 +231,26 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // 5. Upload de fotos e arquivos anexados
+  // 5. Upload de fotos e arquivos anexados organizados por mês
   if (req.method === 'POST' && pathname === '/api/upload') {
     const originalName = reqUrl.searchParams.get('name') || 'arquivo';
     const originalType = reqUrl.searchParams.get('type') || 'application/octet-stream';
+    let month = reqUrl.searchParams.get('month'); // formato esperado: YYYY-MM
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      const now = new Date();
+      month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    // Cria a pasta do mês dentro de uploads se não existir
+    const monthDir = path.join(UPLOADS_DIR, month);
+    if (!fs.existsSync(monthDir)) {
+      fs.mkdirSync(monthDir, { recursive: true });
+    }
+
     const ext = path.extname(originalName) || '';
     const fileId = 'file_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     const safeName = fileId + ext;
-    const destPath = path.join(UPLOADS_DIR, safeName);
+    const destPath = path.join(monthDir, safeName);
 
     const fileStream = fs.createWriteStream(destPath);
     req.pipe(fileStream);
@@ -234,7 +263,8 @@ const server = http.createServer(async (req, res) => {
           name: originalName,
           type: originalType,
           size: stats.size,
-          url: '/uploads/' + safeName
+          month: month,
+          url: `/uploads/${month}/${safeName}`
         });
       } catch (err) {
         return sendJSON(res, 500, { success: false, error: err.message });
@@ -247,22 +277,52 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 6. Excluir anexo
+  // 6. Excluir anexo (suporta busca no mês ou raiz de uploads)
   if (req.method === 'DELETE' && pathname.startsWith('/api/upload/')) {
-    const fname = path.basename(pathname.replace('/api/upload/', ''));
-    const target = path.join(UPLOADS_DIR, fname);
-    if (fs.existsSync(target)) {
-      try { fs.unlinkSync(target); } catch (_) {}
+    const rawTarget = decodeURIComponent(pathname.replace('/api/upload/', '')).replace(/^[/\\]+/, '');
+    const directPath = path.normalize(path.join(UPLOADS_DIR, rawTarget));
+    if (directPath.startsWith(UPLOADS_DIR) && fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
+      try { fs.unlinkSync(directPath); } catch (_) {}
+      return sendJSON(res, 200, { success: true });
     }
+
+    const baseTarget = path.basename(rawTarget);
+    const findAndDelete = (dir) => {
+      if (!fs.existsSync(dir)) return false;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (findAndDelete(full)) return true;
+        } else if (entry.isFile()) {
+          if (entry.name === baseTarget || entry.name.startsWith(baseTarget + '.')) {
+            try { fs.unlinkSync(full); } catch (_) {}
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    findAndDelete(UPLOADS_DIR);
     return sendJSON(res, 200, { success: true });
   }
 
   // ===================== ARQUIVOS ESTÁTICOS =====================
-  // Pasta de uploads
+  // Pasta de uploads (suporta subpastas de mês ex: /uploads/2026-11/foto.png e raiz)
   if (pathname.startsWith('/uploads/')) {
-    const filename = path.basename(pathname.replace('/uploads/', ''));
+    const relPath = pathname.replace('/uploads/', '');
+    const cleanPath = path.normalize(path.join(UPLOADS_DIR, relPath));
+    if (!cleanPath.startsWith(UPLOADS_DIR)) {
+      res.writeHead(403);
+      return res.end('Acesso proibido');
+    }
     const downloadName = reqUrl.searchParams.get('filename');
-    return serveStatic(req, res, path.join(UPLOADS_DIR, filename), downloadName);
+    if (fs.existsSync(cleanPath) && fs.statSync(cleanPath).isFile()) {
+      return serveStatic(req, res, cleanPath, downloadName);
+    }
+    const fallbackPath = path.join(UPLOADS_DIR, path.basename(relPath));
+    return serveStatic(req, res, fallbackPath, downloadName);
   }
 
   // Pasta de assets
