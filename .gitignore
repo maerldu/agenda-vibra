@@ -1,6 +1,18 @@
+# Dependências e IDE
 node_modules/
 .vscode/
+
+# Arquivos temporários e atalhos locais
 *.lnk
 *.bak
 err.txt
 out.txt
+
+# Dados locais e arquivos de produção gerados em tempo de execução
+# (Não são rastreados pelo Git para que commits, checkouts ou pulls NUNCA apaguem viagens, relatórios ou anexos)
+data/*.json
+!data/database.template.json
+data/backups/
+data/*.log
+uploads/*
+!uploads/.gitkeep

@@ -110,6 +110,10 @@ body,select,input,option,div,span,h1,h2,h3,h4,p,button,textarea{font-family:'72 
           <svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M12 4v16m8-8H4'/></svg>
           Nova viagem
         </button>
+        <button onclick='openBackupModal()' class='btn btn-o flex items-center gap-1.5' title='Backup e Segurança dos Registros'>
+          <svg class='w-4 h-4 text-[#007A33]' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4'/></svg>
+          Backup
+        </button>
       </div>
     </div>
 
@@ -249,6 +253,68 @@ body,select,input,option,div,span,h1,h2,h3,h4,p,button,textarea{font-family:'72 
   </div>
 </div>
 
+<!-- MODAL: BACKUP E SEGURANÇA -->
+<div id='backup-modal' class='hidden fixed inset-0 bg-slate-900/50 z-50 items-center justify-center p-4 fade-in'>
+  <div class='modal-in bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200'>
+    <div class='bg-[#007A33] px-6 py-5 flex items-center justify-between text-white'>
+      <div class='flex items-center gap-2.5'>
+        <div class='w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-[#C4D600] font-bold'>
+          <svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z'/></svg>
+        </div>
+        <div>
+          <h3 class='font-extrabold text-base'>Segurança & Backup dos Registros</h3>
+          <p class='text-[10px] text-white/80 uppercase tracking-widest font-bold'>Armazenamento isolado do Git</p>
+        </div>
+      </div>
+      <button onclick="closeModal('backup-modal')" class='text-white/70 hover:text-white text-2xl leading-none'>&times;</button>
+    </div>
+    <div class='p-6 space-y-4 max-h-[75vh] overflow-y-auto'>
+      <div class='bg-emerald-50 border border-emerald-200 rounded-xl p-4'>
+        <div class='flex items-center gap-2 text-emerald-800 font-bold text-xs uppercase tracking-wider mb-1.5'>
+          <span class='w-2 h-2 rounded-full bg-emerald-500 animate-pulse'></span>
+          <span>Proteção Anti-Perda Ativa</span>
+        </div>
+        <p class='text-xs text-emerald-700 leading-relaxed'>
+          Seus dados de viagens e relatórios são gravados em múltiplos arquivos dedicados e backups rotativos protegidos contra commits do Git.
+        </p>
+        <div class='grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-emerald-200/60 text-center'>
+          <div class='bg-white/90 rounded-lg p-2.5 border border-emerald-100 shadow-xs'>
+            <p id='stat-trips-count' class='text-xl font-black text-emerald-800'>0</p>
+            <p class='text-[10px] text-emerald-600 font-bold uppercase'>Viagens</p>
+          </div>
+          <div class='bg-white/90 rounded-lg p-2.5 border border-emerald-100 shadow-xs'>
+            <p id='stat-reports-count' class='text-xl font-black text-emerald-800'>0</p>
+            <p class='text-[10px] text-emerald-600 font-bold uppercase'>Relatórios</p>
+          </div>
+          <div class='bg-white/90 rounded-lg p-2.5 border border-emerald-100 shadow-xs'>
+            <p id='stat-backups-count' class='text-xl font-black text-emerald-800'>0</p>
+            <p class='text-[10px] text-emerald-600 font-bold uppercase'>Backups</p>
+          </div>
+        </div>
+      </div>
+
+      <div class='border border-slate-200 rounded-xl p-4 bg-slate-50/50'>
+        <h4 class='text-xs font-extrabold text-slate-800 uppercase tracking-wider mb-1'>1. Baixar Cópia de Segurança (JSON)</h4>
+        <p class='text-xs text-slate-500 mb-3'>Gera um arquivo completo com todas as viagens, relatórios e datas gravadas.</p>
+        <button onclick="exportBackupFile()" class='w-full btn btn-g py-2.5 text-xs flex items-center justify-center gap-2 shadow-xs'>
+          <svg class='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4'/></svg>
+          Baixar Backup Agora (.json)
+        </button>
+      </div>
+
+      <div class='border border-slate-200 rounded-xl p-4 bg-slate-50/50'>
+        <h4 class='text-xs font-extrabold text-slate-800 uppercase tracking-wider mb-1'>2. Restaurar a partir de Backup</h4>
+        <p class='text-xs text-slate-500 mb-3'>Selecione um arquivo de backup para mesclar e recuperar registros antigos sem perder nada.</p>
+        <input type='file' id='import-backup-file' accept='.json,application/json' class='hidden' onchange='handleBackupImport(event)'>
+        <button onclick="$('import-backup-file').click()" class='w-full btn btn-o py-2.5 text-xs flex items-center justify-center gap-2'>
+          <svg class='w-4 h-4 text-[#007A33]' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12'/></svg>
+          Selecionar Arquivo para Restaurar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ============================================================
    AGENDA VIBRA — SISTEMA COMPLETO COM FOTOS NOS ÍCONES & MAPA
@@ -259,7 +325,7 @@ body,select,input,option,div,span,h1,h2,h3,h4,p,button,textarea{font-family:'72 
 let _syncing = false;
 let _lastServerUpdated = null;
 
-function setServerStatus(online) {
+function setServerStatus(online, countTrips, countReports) {
   const badge = $('server-status-badge');
   const dot = $('server-status-dot');
   const txt = $('server-status-text');
@@ -268,7 +334,9 @@ function setServerStatus(online) {
   badge.classList.add('flex');
   if (online) {
     if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
-    if (txt) txt.textContent = 'Servidor Local Conectado';
+    const cT = countTrips ?? (typeof trips !== 'undefined' ? trips.length : 0);
+    const cR = countReports ?? (typeof reports !== 'undefined' ? reports.length : 0);
+    if (txt) txt.textContent = `Servidor Conectado • ${cT} viagens • ${cR} relatórios`;
   } else {
     if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-400';
     if (txt) txt.textContent = 'Modo Local (Offline)';
@@ -282,27 +350,86 @@ async function syncFromServer(force = false) {
     const res = await fetch('/api/data', { cache: 'no-store' });
     if (!res.ok) throw new Error('Servidor offline');
     const data = await res.json();
-    setServerStatus(true);
+    setServerStatus(true, (data.trips || []).length, (data.reports || []).length);
 
     if (force || !_lastServerUpdated || data.lastUpdated !== _lastServerUpdated) {
       _lastServerUpdated = data.lastUpdated;
       const localTrips = load(KEY_TRIPS);
       const localReports = load(KEY_REPORTS);
 
-      // Se o servidor estiver limpo e o navegador local tiver dados antigos, sincroniza para o servidor
-      if ((!data.trips || data.trips.length === 0) && localTrips.length > 0) {
-        await fetch('/api/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trips: localTrips, reports: localReports })
-        });
-      } else if (Array.isArray(data.trips)) {
-        trips = data.trips;
-        reports = data.reports || [];
-        save(KEY_TRIPS, trips);
-        save(KEY_REPORTS, reports);
-        refresh();
+      // Sincroniza e mescla viagens (NUNCA apaga viagens locais)
+      const serverTrips = Array.isArray(data.trips) ? data.trips : [];
+      const tripMap = new Map();
+
+      // 1. Viagens do servidor
+      serverTrips.forEach(t => {
+        if (t && t.id) tripMap.set(t.id, { ...t });
+      });
+
+      // 2. Mescla viagens locais (preserva se nova ou mais recente)
+      let needsPushTrips = false;
+      localTrips.forEach(lt => {
+        if (!lt || !lt.id) return;
+        const st = tripMap.get(lt.id);
+        if (!st) {
+          tripMap.set(lt.id, lt);
+          needsPushTrips = true;
+        } else {
+          const lTime = new Date(lt.updatedAt || lt.startDate || 0).getTime();
+          const sTime = new Date(st.updatedAt || st.startDate || 0).getTime();
+          if (lTime > sTime) {
+            tripMap.set(lt.id, { ...st, ...lt });
+            needsPushTrips = true;
+          }
+        }
+      });
+
+      trips = Array.from(tripMap.values());
+      save(KEY_TRIPS, trips);
+      if (needsPushTrips) {
+        syncTripsToServer(trips);
       }
+
+      // Mesclagem robusta de relatórios: NUNCA apaga relatórios locais nem do servidor
+      const serverReports = Array.isArray(data.reports) ? data.reports : [];
+      const reportMap = new Map();
+
+      // 1. Inclui relatórios do servidor
+      serverReports.forEach(r => {
+        const k = r.tripId || r.id;
+        if (k) reportMap.set(k, { ...r, id: k, tripId: k });
+      });
+
+      // 2. Mescla relatórios locais (se local for mais recente ou ausente no servidor, mantém e sincroniza!)
+      let needsPushToServer = false;
+      localReports.forEach(lr => {
+        const k = lr.tripId || lr.id;
+        if (!k) return;
+        const cleanLR = { ...lr, id: k, tripId: k };
+        const sr = reportMap.get(k);
+        if (!sr) {
+          reportMap.set(k, cleanLR);
+          needsPushToServer = true;
+        } else {
+          const lTime = new Date(cleanLR.updatedAt || 0).getTime();
+          const sTime = new Date(sr.updatedAt || 0).getTime();
+          if (lTime > sTime) {
+            reportMap.set(k, cleanLR);
+            needsPushToServer = true;
+          }
+        }
+      });
+
+      reports = Array.from(reportMap.values());
+      save(KEY_REPORTS, reports);
+
+      // Se havia relatórios locais pendentes que não estavam no servidor, sincroniza agora
+      if (needsPushToServer) {
+        syncReportsToServer(reports);
+      }
+
+      refresh();
+      setServerStatus(true, trips.length, reports.length);
     }
   } catch (e) {
     setServerStatus(false);
@@ -321,6 +448,24 @@ async function syncTripsToServer(list) {
   } catch (e) { console.warn('Falha ao enviar viagens ao servidor:', e); }
 }
 
+async function saveSingleTripToServer(trip) {
+  try {
+    const res = await fetch('/api/trip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(trip)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setServerStatus(true, data.count, reports.length);
+      return data;
+    }
+  } catch (e) {
+    console.warn('Falha ao salvar viagem individual no servidor:', e);
+  }
+  return null;
+}
+
 async function syncReportsToServer(list) {
   try {
     await fetch('/api/reports', {
@@ -331,6 +476,24 @@ async function syncReportsToServer(list) {
   } catch (e) { console.warn('Falha ao enviar relatórios ao servidor:', e); }
 }
 
+async function saveSingleReportToServer(rep) {
+  try {
+    const res = await fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rep)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setServerStatus(true, trips.length, data.count);
+      return data;
+    }
+  } catch (e) {
+    console.warn('Falha ao salvar relatório único no servidor:', e);
+  }
+  return null;
+}
+
 async function syncAllToServer(tripsList, reportsList) {
   try {
     await fetch('/api/sync', {
@@ -339,6 +502,73 @@ async function syncAllToServer(tripsList, reportsList) {
       body: JSON.stringify({ trips: tripsList, reports: reportsList })
     });
   } catch (e) { console.warn('Falha ao sincronizar dados com o servidor:', e); }
+}
+
+async function openBackupModal() {
+  openModal('backup-modal');
+  try {
+    const res = await fetch('/api/stats');
+    if (res.ok) {
+      const stats = await res.json();
+      $('stat-trips-count').textContent = stats.trips ?? trips.length;
+      $('stat-reports-count').textContent = stats.reports ?? reports.length;
+      $('stat-backups-count').textContent = stats.backups ?? 'Ativo';
+      return;
+    }
+  } catch (_) {}
+  $('stat-trips-count').textContent = trips.length;
+  $('stat-reports-count').textContent = reports.length;
+  $('stat-backups-count').textContent = 'Local';
+}
+
+function exportBackupFile() {
+  window.open('/api/backup/export', '_blank');
+  showToast('Download do backup iniciado.');
+}
+
+async function handleBackupImport(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const json = JSON.parse(text);
+    const res = await fetch('/api/backup/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(json)
+    });
+    if (res.ok) {
+      const result = await res.json();
+      showToast('Backup restaurado com sucesso!');
+      await syncFromServer(true);
+      closeModal('backup-modal');
+    } else {
+      const err = await res.json();
+      alert('Erro ao restaurar backup: ' + (err.error || 'Arquivo inválido.'));
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Falha ao processar arquivo de backup: ' + err.message);
+  } finally {
+    e.target.value = '';
+  }
+}
+
+function showToast(msg) {
+  let toast = $('app-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'app-toast';
+    toast.className = 'fixed bottom-5 right-5 z-50 bg-[#007A33] text-white text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none translate-y-2';
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `<span>✓</span> <span>${esc(msg)}</span>`;
+  toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-2');
+  toast.classList.add('opacity-100', 'translate-y-0');
+  setTimeout(() => {
+    toast.classList.remove('opacity-100', 'translate-y-0');
+    toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-2');
+  }, 3500);
 }
 
 const KEY_TRIPS='agenda-vibra:trips', KEY_REPORTS='agenda-vibra:reports', KEY_USER='agenda-vibra:user';
@@ -687,7 +917,7 @@ function renderCalendar(){
       const chip=document.createElement('div');
       chip.className='text-[9px] md:text-[10px] font-bold text-white rounded px-1.5 py-0.5 truncate flex items-center justify-between shadow-xs';
       chip.style.background=colorFor(t.owner);
-      chip.innerHTML=`<span class='truncate'>${iso===t.startDate&&t.startTime?t.startTime+' ':''}${esc(t.title)}</span>${reports.some(r=>r.tripId===t.id)?'<span class="ml-1 text-[8px]">📄</span>':''}`;
+      chip.innerHTML=`<span class='truncate'>${iso===t.startDate&&t.startTime?t.startTime+' ':''}${esc(t.title)}</span>${reports.some(r=>r.tripId===t.id||r.id===t.id)?'<span class="ml-1 text-[8px]" title="Relatório preenchido">📄</span>':''}`;
       chip.onclick=e=>{e.stopPropagation();openTripDetails(t.id)};
       wrap.appendChild(chip);
     });
@@ -970,17 +1200,25 @@ $('trip-form').addEventListener('submit',e=>{
     owner:$('trip-owner').value || currentUser,
     ownerEmail:emailAtual(),
     description:$('trip-description').value.trim(),
-    createdBy:old?.createdBy||currentUser
+    createdBy:old?.createdBy||currentUser,
+    updatedAt:new Date().toISOString()
   };
 
   try{
     const id=editId||uid('trip');
-    const next=[...trips.filter(t=>t.id!==id),{id,...data}];
+    const newTrip={id,...data};
+    const next=[...trips.filter(t=>t.id!==id),newTrip];
     save(KEY_TRIPS,next);
     trips=next;
     refresh();
-    syncTripsToServer(next);
+
+    // Salvar viagem no servidor imediatamente com backup e redundância
+    saveSingleTripToServer(newTrip).catch(()=>{
+      syncTripsToServer(next);
+    });
+
     closeModal('trip-modal');
+    showToast('Viagem salva com sucesso!');
   }catch(err){
     console.error(err);
     showErr('trip-error','Não foi possível salvar a viagem.');
@@ -990,7 +1228,7 @@ $('trip-form').addEventListener('submit',e=>{
 function openTripDetails(id){
   const t=trips.find(x=>x.id===id);
   if(!t) return;
-  const r=reports.find(x=>x.tripId===id);
+  const r=reports.find(x=>(x.tripId===id||x.id===id));
   const c=colorFor(t.owner);
 
   $('details-title').textContent='Detalhes da viagem';
@@ -1008,7 +1246,7 @@ function openTripDetails(id){
     </div>
     ${t.description?`<p class='lbl'>Descrição</p><p class='text-sm text-slate-600 whitespace-pre-wrap mb-4'>${esc(t.description)}</p>`:''}
     <div class='border-t border-slate-100 pt-4 flex flex-wrap gap-2 items-center'>
-      ${r?`<button onclick="viewReport('${r.id}')" class='btn btn-o'>Ver relatório</button>`:''}
+      ${r?`<button onclick="viewReport('${r.tripId||r.id}')" class='btn btn-o'>Ver relatório</button>`:''}
       ${canEdit(t)?`
         <button onclick="openReportModal('${id}')" class='btn btn-g'>${r?'Editar relatório':'Preencher relatório'}</button>
         <button onclick="editTrip('${id}')" class='btn btn-o'>Editar</button>
@@ -1030,15 +1268,19 @@ function deleteTrip(id){
   const t=trips.find(x=>x.id===id);
   if(!canEdit(t)||!confirm('Excluir a viagem para '+t.title+'?')) return;
   try{
-    reports.filter(r=>r.tripId===id).forEach(r=>[...(r.photos||[]),...(r.attachments||[])].forEach(f=>{if(f.id)delFile(f.id)}));
-    const nt=trips.filter(x=>x.id!==id), nr=reports.filter(r=>r.tripId!==id);
+    reports.filter(r=>(r.tripId===id||r.id===id)).forEach(r=>[...(r.photos||[]),...(r.attachments||[])].forEach(f=>{if(f.id)delFile(f.id)}));
+    const nt=trips.filter(x=>x.id!==id);
+    const nr=reports.filter(r=>r.tripId!==id&&r.id!==id);
     save(KEY_TRIPS,nt);
     save(KEY_REPORTS,nr);
     trips=nt;
     reports=nr;
-    syncAllToServer(nt, nr);
+    syncTripsToServer(nt);
+    fetch('/api/trip/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+    fetch('/api/report/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
     refresh();
     closeModal('details-modal');
+    showToast('Viagem excluída.');
   }catch(err){
     console.error(err);
     alert('Não foi possível excluir a viagem.');
@@ -1049,7 +1291,7 @@ function deleteTrip(id){
 function openReportModal(tripId){
   const t=trips.find(x=>x.id===tripId);
   if(!canEdit(t)) return;
-  const r=reports.find(x=>x.tripId===tripId);
+  const r=reports.find(x=>(x.tripId===tripId||x.id===tripId));
   $('report-form').reset();
   $('report-error').classList.add('hidden');
   $('report-id').value=r?r.id:'';
@@ -1165,7 +1407,7 @@ $('report-form').addEventListener('submit',async e=>{
   const purpose=$('report-purpose').value.trim(), experience=$('report-experience').value.trim();
   if(!purpose||!experience) return showErr('report-error','Preencha a finalidade e a experiência da viagem.');
 
-  const oldRep=reports.find(r=>r.tripId===tripId);
+  const oldRep=reports.find(r=>(r.tripId===tripId||r.id===tripId));
   const novos=[...$('report-photos').files,...$('report-files').files];
   const grande=novos.find(f=>f.size>MAX_FILE);
   if(grande) return showErr('report-error',`O arquivo "${grande.name}" tem ${fmtSize(grande.size)} e passa do limite de ${MAX_FILE_MB} MB por arquivo.`);
@@ -1174,7 +1416,7 @@ $('report-form').addEventListener('submit',async e=>{
 
   const btn=$('report-save-button');
   btn.disabled=true;
-  btn.textContent='Salvando...';
+  btn.textContent='Salvando relatório...';
   const savedIds=[];
 
   try{
@@ -1185,7 +1427,8 @@ $('report-form').addEventListener('submit',async e=>{
     for(const f of $('report-files').files){const d=await toData(f, tripMonth);savedIds.push(d.id);attachments.push(d)}
 
     const rep={
-      tripId,
+      id:tripId,
+      tripId:tripId,
       month:tripMonth,
       purpose,
       objective:$('report-objective').value.trim(),
@@ -1200,13 +1443,29 @@ $('report-form').addEventListener('submit',async e=>{
     };
 
     reportMonth=tripMonth;
-    const next=[...reports.filter(r=>r.tripId!==tripId),{id:tripId,...rep}];
+    const next=[...reports.filter(r=>r.tripId!==tripId&&r.id!==tripId),rep];
     save(KEY_REPORTS,next);
     reports=next;
     refresh();
-    syncReportsToServer(next);
+
+    // Salvar diretamente no servidor com confirmação
+    let savedOnServer = false;
+    try {
+      const serverRes = await saveSingleReportToServer(rep);
+      if (serverRes && serverRes.success) {
+        savedOnServer = true;
+      }
+    } catch (_) {}
+
+    if (!savedOnServer) {
+      try {
+        await syncReportsToServer(next);
+      } catch (_) {}
+    }
+
     closeModal('report-modal');
     $('report-photos').value='';$('report-files').value='';
+    showToast('Relatório salvo com sucesso!');
   }catch(err){
     console.error(err);
     savedIds.forEach(delFile);
@@ -1222,12 +1481,12 @@ $('report-form').addEventListener('submit',async e=>{
 const block=(t,v)=>v?`<div class='mb-4'><p class='lbl'>${t}</p><p class='text-sm text-slate-600 whitespace-pre-wrap'>${esc(v)}</p></div>`:'';
 
 async function viewReport(id){
-  const r=reports.find(x=>x.id===id);
+  const r=reports.find(x=>(x.id===id||x.tripId===id));
   if(!r) return;
   const photoUrls=await Promise.all((r.photos||[]).map(fileURL));
   const attUrls=await Promise.all((r.attachments||[]).map(fileURL));
-  const t=trips.find(x=>x.id===r.tripId);
-  const normalizedOwner = normalizeName(t?.owner);
+  const t=trips.find(x=>x.id===(r.tripId||r.id));
+  const normalizedOwner = normalizeName(t?.owner||r.author);
 
   $('details-title').textContent='Relatório de viagem';
   $('details-content').innerHTML=`
@@ -1235,7 +1494,7 @@ async function viewReport(id){
       <div class='w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-sm' style='background:${colorFor(normalizedOwner)}'>${avatarImg(normalizedOwner)}</div>
       <div>
         <p class='text-lg font-extrabold text-slate-800 leading-tight'>${esc(t?.title||'Viagem')}</p>
-        <p class='text-xs text-slate-500'>${t?fmt(t.startDate)+' a '+fmt(t.endDate)+' • '+esc(normalizedOwner):''}</p>
+        <p class='text-xs text-slate-500'>${t?fmt(t.startDate)+' a '+fmt(t.endDate)+' • '+esc(normalizedOwner):(r.author?'Por '+esc(r.author):'')}</p>
       </div>
     </div>
     ${block('Finalidade',r.purpose)}
@@ -1251,15 +1510,15 @@ async function viewReport(id){
     <div class='space-y-1 mb-5'>
       ${(r.attachments||[]).length?r.attachments.map((a,i)=>`<a href='${attUrls[i]}${attUrls[i].includes('?')?'&':'?'}filename=${encodeURIComponent(a.name)}' download='${esc(a.name)}' target='_blank' class='flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 transition-colors'><span>📎 ${esc(a.name)}${a.size?' ('+fmtSize(a.size)+')':''}</span><span class='text-[10px] text-[#007A33] font-bold uppercase tracking-wider ml-2'>Baixar</span></a>`).join(''):'<span class="text-xs text-slate-400 italic">Nenhum anexo.</span>'}
     </div>
-    ${canEdit(t)?`<button onclick="openReportModal('${r.tripId}')" class='btn btn-g'>Editar relatório</button>`:''}
+    ${canEdit(t)?`<button onclick="openReportModal('${r.tripId||r.id}')" class='btn btn-g'>Editar relatório</button>`:''}
   `;
   openModal('details-modal');
 }
 
 function getReportMonth(r){
-  if(r.month) return r.month;
-  const t=trips.find(x=>x.id===r.tripId);
+  const t=trips.find(x=>x.id===(r.tripId||r.id));
   if(t&&t.startDate) return t.startDate.slice(0,7);
+  if(r.month) return r.month;
   if(r.updatedAt) return r.updatedAt.slice(0,7);
   return todayISO().slice(0,7);
 }
@@ -1292,7 +1551,7 @@ function toggleReportAllMonths(){
 }
 
 function renderReportCard(r){
-  const t=trips.find(x=>x.id===r.tripId), c=colorFor(t?.owner);
+  const t=trips.find(x=>x.id===(r.tripId||r.id)), c=colorFor(t?.owner||r.author);
   const m=getReportMonth(r);
   const [my,mm]=m.split('-').map(Number);
   const monthName=(MESES[mm-1]||'')+' '+my;
@@ -1302,7 +1561,7 @@ function renderReportCard(r){
   return `<div class='bg-white border border-slate-200 rounded-2xl p-5 hover:border-[#007A33]/50 hover:shadow-sm transition-all flex flex-col justify-between'>
     <div>
       <div class='flex items-center gap-3'>
-        <div class='w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-sm shadow-xs flex-shrink-0' style='background:${c}'>${avatarImg(t?.owner)}</div>
+        <div class='w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-sm shadow-xs flex-shrink-0' style='background:${c}'>${avatarImg(t?.owner||r.author)}</div>
         <div class='flex-1 min-w-0'>
           <p class='text-sm font-extrabold text-slate-800 truncate'>${esc(t?.title||'Viagem')}</p>
           <p class='text-[11px] text-slate-400 font-medium truncate'>${t?fmt(t.startDate)+' a '+fmt(t.endDate):''}</p>
@@ -1321,8 +1580,8 @@ function renderReportCard(r){
       `:''}
     </div>
     <div class='flex items-center gap-2 mt-4 pt-3 border-t border-slate-100'>
-      <button onclick="viewReport('${r.id}')" class='btn btn-o text-xs py-1.5 px-3'>Ver relatório</button>
-      ${canEdit(t)?`<button onclick="openReportModal('${r.tripId}')" class='btn btn-g text-xs py-1.5 px-3'>Editar</button>`:''}
+      <button onclick="viewReport('${r.tripId||r.id}')" class='btn btn-o text-xs py-1.5 px-3'>Ver relatório</button>
+      ${canEdit(t)?`<button onclick="openReportModal('${r.tripId||r.id}')" class='btn btn-g text-xs py-1.5 px-3'>Editar</button>`:''}
     </div>
   </div>`;
 }
