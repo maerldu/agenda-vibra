@@ -284,6 +284,12 @@ function readDB() {
     }
   }
 
+  // Remove relatórios órfãos se a viagem correspondente não existir
+  if (Array.isArray(db.trips) && Array.isArray(db.reports)) {
+    const validTripIds = new Set(db.trips.map(t => t.id));
+    db.reports = db.reports.filter(r => validTripIds.has(r.tripId || r.id));
+  }
+
   return db;
 }
 
@@ -572,16 +578,21 @@ const server = http.createServer(async (req, res) => {
       const rawReports = Array.isArray(body) ? body : (body.reports || []);
       const db = readDB();
       const tripMap = new Map((db.trips || []).map(t => [t.id, t]));
-      const cleanIncoming = rawReports.map(r => {
-        const tid = r.tripId || r.id;
-        const t = tripMap.get(tid);
-        if (t && t.startDate) {
-          r.month = t.startDate.slice(0, 7);
-        } else if (!r.month) {
-          r.month = r.updatedAt ? r.updatedAt.slice(0, 7) : new Date().toISOString().slice(0, 7);
-        }
-        return { ...r, id: tid, tripId: tid };
-      });
+      const cleanIncoming = rawReports
+        .filter(r => {
+          const tid = r.tripId || r.id;
+          return tripMap.has(tid);
+        })
+        .map(r => {
+          const tid = r.tripId || r.id;
+          const t = tripMap.get(tid);
+          if (t && t.startDate) {
+            r.month = t.startDate.slice(0, 7);
+          } else if (!r.month) {
+            r.month = r.updatedAt ? r.updatedAt.slice(0, 7) : new Date().toISOString().slice(0, 7);
+          }
+          return { ...r, id: tid, tripId: tid };
+        });
 
       db.reports = mergeReports(db.reports || [], cleanIncoming);
       writeDB(db);

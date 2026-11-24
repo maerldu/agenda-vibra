@@ -268,7 +268,10 @@ body,select,input,option,div,span,h1,h2,h3,h4,p,button,textarea{font-family:'72 
       <div><label class='lbl'>Anexos / documentos</label><input id='report-files' type='file' multiple class='inp'><div id='file-preview' class='mt-2 space-y-1'></div></div>
       <div id='size-info' class='text-[11px] font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2'></div>
       <div id='report-error' class='hidden text-xs text-red-600 font-semibold'></div>
-      <button id='report-save-button' type='submit' class='w-full btn btn-g py-3 text-xs'>Salvar relatório</button>
+      <div class='flex items-center gap-3 pt-2'>
+        <button id='report-save-button' type='submit' class='flex-1 btn btn-g py-3 text-xs font-bold'>Salvar relatório</button>
+        <button id='report-delete-btn' type='button' onclick='deleteCurrentReport()' class='hidden btn border border-red-200 text-red-500 hover:bg-red-50 py-3 px-4 text-xs font-semibold'>Excluir relatório</button>
+      </div>
     </form>
   </div>
 </div>
@@ -410,21 +413,22 @@ async function syncFromServer(force = false) {
         syncTripsToServer(trips);
       }
 
-      // Mesclagem robusta de relatórios: NUNCA apaga relatórios locais nem do servidor
+      // Mesclagem robusta de relatórios
       const serverReports = Array.isArray(data.reports) ? data.reports : [];
       const reportMap = new Map();
+      const validTripIds = new Set(trips.map(t => t.id));
 
-      // 1. Inclui relatórios do servidor
+      // 1. Inclui relatórios do servidor (apenas se a viagem existir)
       serverReports.forEach(r => {
         const k = r.tripId || r.id;
-        if (k) reportMap.set(k, { ...r, id: k, tripId: k });
+        if (k && validTripIds.has(k)) reportMap.set(k, { ...r, id: k, tripId: k });
       });
 
-      // 2. Mescla relatórios locais (se local for mais recente ou ausente no servidor, mantém e sincroniza!)
+      // 2. Mescla relatórios locais (se a viagem foi excluída, descarta o relatório órfão)
       let needsPushToServer = false;
       localReports.forEach(lr => {
         const k = lr.tripId || lr.id;
-        if (!k) return;
+        if (!k || !validTripIds.has(k)) return;
         const cleanLR = { ...lr, id: k, tripId: k };
         const sr = reportMap.get(k);
         if (!sr) {
@@ -448,6 +452,7 @@ async function syncFromServer(force = false) {
         syncReportsToServer(reports);
       }
 
+      cleanOrphanReports();
       refresh();
       setServerStatus(true, trips.length, reports.length);
     }
@@ -862,6 +867,7 @@ function selectUser(nome){
   if($('reports-month')) $('reports-month').value=reportMonth;
   view='calendar';
   applyView();
+  cleanOrphanReports();
   renderCalendar();
   renderReports();
   initMap();
@@ -1318,6 +1324,8 @@ function deleteTrip(id){
     syncTripsToServer(nt);
     fetch('/api/trip/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
     fetch('/api/report/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+    syncReportsToServer(nr);
+    cleanOrphanReports();
     refresh();
     closeModal('details-modal');
     closeModal('day-trips-modal');
@@ -1449,6 +1457,8 @@ function deleteTripFromDay(id, iso){
     syncTripsToServer(nt);
     fetch('/api/trip/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
     fetch('/api/report/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+    syncReportsToServer(nr);
+    cleanOrphanReports();
     refresh();
     showToast('Viagem excluída.');
 
@@ -1464,17 +1474,86 @@ function deleteTripFromDay(id, iso){
   }
 }
 
+/* ===== LIMPEZA E EXCLUSÃO DE RELATÓRIOS ===== */
+function cleanOrphanReports(){
+  if(!Array.isArray(trips) || !Array.isArray(reports)) return;
+  const validTripIds = new Set(trips.map(t => t.id));
+  const orphans = reports.filter(r => {
+    const k = r.tripId || r.id;
+    return !validTripIds.has(k);
+  });
+  if(orphans.length > 0){
+    console.warn('Removendo relatórios órfãos cuja viagem foi excluída do calendário:', orphans.length);
+    orphans.forEach(r => {
+      const k = r.tripId || r.id;
+      [...(r.photos || []), ...(r.attachments || [])].forEach(f => {
+        if(f && f.id) delFile(f.id);
+      });
+      fetch('/api/report/' + encodeURIComponent(k), { method: 'DELETE' }).catch(() => {});
+    });
+    reports = reports.filter(r => validTripIds.has(r.tripId || r.id));
+    save(KEY_REPORTS, reports);
+    syncReportsToServer(reports);
+  }
+}
+
+async function deleteReport(id){
+  const r = reports.find(x => (x.id === id || x.tripId === id));
+  if(!r) return;
+  const t = trips.find(x => x.id === (r.tripId || r.id));
+  const tripName = t ? t.title : (r.purpose || 'Viagem');
+  
+  if(!confirm(`Excluir o relatório de "${tripName}"? Esta ação removerá as informações, fotos e anexos do relatório.`)) return;
+
+  try {
+    [...(r.photos || []), ...(r.attachments || [])].forEach(f => {
+      if(f && f.id) delFile(f.id);
+    });
+
+    const targetId = r.tripId || r.id;
+    const nr = reports.filter(x => x.tripId !== targetId && x.id !== targetId);
+    save(KEY_REPORTS, nr);
+    reports = nr;
+
+    fetch('/api/report/' + encodeURIComponent(targetId), { method: 'DELETE' }).catch(() => {});
+    syncReportsToServer(nr);
+
+    closeModal('details-modal');
+    closeModal('report-modal');
+    refresh();
+    showToast('Relatório excluído com sucesso!');
+  } catch(err) {
+    console.error(err);
+    alert('Erro ao excluir relatório.');
+  }
+}
+
+function deleteCurrentReport(){
+  const tripId = $('report-trip-id').value;
+  if(tripId) deleteReport(tripId);
+}
+
 /* ===== RELATÓRIO ===== */
 function openReportModal(tripId){
   const t=trips.find(x=>x.id===tripId);
-  if(!canEdit(t)) return;
   const r=reports.find(x=>(x.tripId===tripId||x.id===tripId));
+  if(!t && !r) return;
+  if(!currentUser) return;
   $('report-form').reset();
   $('report-error').classList.add('hidden');
   $('report-id').value=r?r.id:'';
   $('report-trip-id').value=tripId;
-  $('report-trip-summary').textContent=`${t.title} • ${fmt(t.startDate)} a ${fmt(t.endDate)} • ${normalizeName(t.owner)}`;
+  const ownerName = t ? normalizeName(t.owner) : (r?.author || currentUser);
+  $('report-trip-summary').textContent= t
+    ? `${t.title} • ${fmt(t.startDate)} a ${fmt(t.endDate)} • ${ownerName}`
+    : `Relatório (${r?.purpose || 'Viagem'}) • ${ownerName}`;
   $('photo-preview').innerHTML=$('file-preview').innerHTML='';
+
+  const delBtn = $('report-delete-btn');
+  if(delBtn){
+    if(r) delBtn.classList.remove('hidden');
+    else delBtn.classList.add('hidden');
+  }
 
   if(r){
     $('report-purpose').value=r.purpose||'';
@@ -1687,7 +1766,10 @@ async function viewReport(id){
     <div class='space-y-1 mb-5'>
       ${(r.attachments||[]).length?r.attachments.map((a,i)=>`<a href='${attUrls[i]}${attUrls[i].includes('?')?'&':'?'}filename=${encodeURIComponent(a.name)}' download='${esc(a.name)}' target='_blank' class='flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 transition-colors'><span>📎 ${esc(a.name)}${a.size?' ('+fmtSize(a.size)+')':''}</span><span class='text-[10px] text-[#007A33] font-bold uppercase tracking-wider ml-2'>Baixar</span></a>`).join(''):'<span class="text-xs text-slate-400 italic">Nenhum anexo.</span>'}
     </div>
-    ${canEdit(t)?`<button onclick="openReportModal('${r.tripId||r.id}')" class='btn btn-g'>Editar relatório</button>`:''}
+    <div class='border-t border-slate-100 pt-4 flex flex-wrap items-center justify-between gap-2'>
+      <button type='button' onclick="openReportModal('${r.tripId||r.id}')" class='btn btn-g font-bold'>Editar relatório</button>
+      <button type='button' onclick="deleteReport('${r.tripId||r.id}')" class='btn border border-red-200 text-red-500 hover:bg-red-50 font-bold'>🗑️ Excluir relatório</button>
+    </div>
   `;
   openModal('details-modal');
 }
@@ -1756,9 +1838,14 @@ function renderReportCard(r){
         </div>
       `:''}
     </div>
-    <div class='flex items-center gap-2 mt-4 pt-3 border-t border-slate-100'>
-      <button onclick="viewReport('${r.tripId||r.id}')" class='btn btn-o text-xs py-1.5 px-3'>Ver relatório</button>
-      ${canEdit(t)?`<button onclick="openReportModal('${r.tripId||r.id}')" class='btn btn-g text-xs py-1.5 px-3'>Editar</button>`:''}
+    <div class='flex items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-100 flex-wrap'>
+      <div class='flex items-center gap-2'>
+        <button type='button' onclick="viewReport('${r.tripId||r.id}')" class='btn btn-o text-xs py-1.5 px-3 font-semibold'>Ver relatório</button>
+        <button type='button' onclick="openReportModal('${r.tripId||r.id}')" class='btn btn-g text-xs py-1.5 px-3 font-semibold'>Editar</button>
+      </div>
+      <button type='button' onclick="deleteReport('${r.tripId||r.id}')" class='btn border border-red-200 text-red-500 hover:bg-red-50 text-xs py-1.5 px-2.5 flex items-center gap-1 font-semibold' title='Excluir este relatório'>
+        🗑️ Excluir
+      </button>
     </div>
   </div>`;
 }
@@ -1891,6 +1978,7 @@ function renderSummary(){
 
 function refresh(){
   if(!currentUser) return;
+  cleanOrphanReports();
   renderCalendar();
   renderReports();
   renderMapMarkers();
@@ -1927,7 +2015,8 @@ Object.assign(window,{
   setMapDate,changeMapDay,resetMapToToday,toggleMapExpand,
   quickSelect,
   setReportMonth,changeReportMonth,setReportMonthToday,toggleReportAllMonths,
-  openDayTripsModal,editTripFromDay,openTripDetailsFromDay,deleteTripFromDay
+  openDayTripsModal,editTripFromDay,openTripDetailsFromDay,deleteTripFromDay,
+  deleteReport,deleteCurrentReport,cleanOrphanReports
 });
 
 /* Inicialização */
