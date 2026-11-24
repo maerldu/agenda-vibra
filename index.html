@@ -226,6 +226,26 @@ body,select,input,option,div,span,h1,h2,h3,h4,p,button,textarea{font-family:'72 
   </div>
 </div>
 
+<!-- MODAL: VIAGENS DO DIA (lista todas as viagens do dia para visualização e edição) -->
+<div id='day-trips-modal' class='hidden fixed inset-0 bg-slate-900/40 z-50 items-center justify-center p-4'>
+  <div class='modal-in bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]'>
+    <div class='bg-[#007A33] px-6 py-4 flex items-center justify-between shrink-0'>
+      <div>
+        <p class='text-[10px] text-white/70 uppercase tracking-widest font-bold' id='day-trips-subtitle'>Viagens agendadas</p>
+        <h3 id='day-trips-title' class='text-white font-extrabold text-lg'>Viagens do dia</h3>
+      </div>
+      <button onclick="closeModal('day-trips-modal')" class='text-white/70 hover:text-white text-2xl leading-none cursor-pointer'>&times;</button>
+    </div>
+    <div id='day-trips-list' class='p-5 space-y-3 overflow-y-auto bg-slate-50 flex-1'></div>
+    <div class='p-4 bg-white border-t border-slate-200 flex items-center justify-between gap-3 shrink-0'>
+      <button type='button' id='day-trips-add-btn' class='btn btn-g text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold shadow-xs'>
+        <span class='text-base leading-none font-bold'>+</span> Nova viagem neste dia
+      </button>
+      <button type='button' onclick="closeModal('day-trips-modal')" class='btn btn-o text-xs py-2 px-4 font-semibold'>Fechar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: RELATÓRIO (edição) -->
 <div id='report-modal' class='hidden fixed inset-0 bg-slate-900/40 z-50 items-center justify-center p-4'>
   <div class='modal-in bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden'>
@@ -809,7 +829,7 @@ if(quickList){
 }
 
 /* ===== AUTENTICAÇÃO E SELEÇÃO ===== */
-const canEdit=t=>!!t&&normalizeName(t.owner)===currentUser;
+const canEdit=t=>!!t&&!!currentUser;
 const emailAtual=()=>Object.keys(EMAILS).find(k=>EMAILS[k]===currentUser)||'';
 
 function quickSelect(email){
@@ -905,7 +925,12 @@ function renderCalendar(){
     const iso=toISO(date),cur=date.getMonth()===viewMonth;
     const dayTrips=trips.filter(t=>inRange(t,iso));
     const cell=document.createElement('div');
-    cell.onclick=()=>openTripModal(null,iso);
+    if(dayTrips.length>2){
+      cell.onclick=()=>openDayTripsModal(iso);
+      cell.title=`Clique para ver e editar as ${dayTrips.length} viagens deste dia`;
+    }else{
+      cell.onclick=()=>openTripModal(null,iso);
+    }
     cell.className='day-cell p-2 rounded-xl border cursor-pointer transition-colors flex flex-col gap-1 '+(cur?'bg-white border-slate-200 hover:border-[#007A33]/50':'bg-slate-50 border-slate-100 text-slate-300 hover:border-slate-200');
 
     const num=document.createElement('div');
@@ -915,16 +940,20 @@ function renderCalendar(){
     const wrap=document.createElement('div');wrap.className='flex flex-col gap-1 overflow-hidden';
     dayTrips.slice(0,2).forEach(t=>{
       const chip=document.createElement('div');
-      chip.className='text-[9px] md:text-[10px] font-bold text-white rounded px-1.5 py-0.5 truncate flex items-center justify-between shadow-xs';
+      chip.className='text-[9px] md:text-[10px] font-bold text-white rounded px-1.5 py-0.5 truncate flex items-center justify-between shadow-xs hover:opacity-90 transition-opacity cursor-pointer';
       chip.style.background=colorFor(t.owner);
+      chip.title=`${normalizeName(t.owner)} - ${t.title} (clique para ver detalhes/editar)`;
       chip.innerHTML=`<span class='truncate'>${iso===t.startDate&&t.startTime?t.startTime+' ':''}${esc(t.title)}</span>${reports.some(r=>r.tripId===t.id||r.id===t.id)?'<span class="ml-1 text-[8px]" title="Relatório preenchido">📄</span>':''}`;
       chip.onclick=e=>{e.stopPropagation();openTripDetails(t.id)};
       wrap.appendChild(chip);
     });
     if(dayTrips.length>2){
-      const m=document.createElement('div');
-      m.className='text-[9px] font-bold text-slate-400';
-      m.textContent='+'+(dayTrips.length-2)+' mais';
+      const m=document.createElement('button');
+      m.type='button';
+      m.className='text-[9px] md:text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-[#007A33]/15 hover:text-[#007A33] border border-slate-200 hover:border-[#007A33]/40 rounded px-1.5 py-0.5 text-left transition-colors flex items-center justify-between cursor-pointer w-full mt-0.5 shadow-xs';
+      m.innerHTML=`<span>+${dayTrips.length-2} mais</span><span class='text-[8px] font-semibold text-slate-500'>Ver todas (${dayTrips.length}) &rarr;</span>`;
+      m.title=`Ver e editar todas as ${dayTrips.length} viagens deste dia`;
+      m.onclick=e=>{e.stopPropagation();openDayTripsModal(iso)};
       wrap.appendChild(m);
     }
     cell.appendChild(wrap);grid.appendChild(cell);
@@ -1043,7 +1072,7 @@ function renderMapMarkers(){
       ?[...hoje].sort((a,b)=>a.owner.localeCompare(b.owner)).map(t=>{
         const isSingleDay=(t.startDate===(t.endDate||t.startDate));
         const voltaText=isSingleDay?'viagem de 1 dia':'volta '+fmt(t.endDate);
-        return `<div class='flex items-center gap-2.5 border border-slate-200 rounded-lg px-3 py-2 bg-white hover:border-[#007A33]/40 transition-colors shadow-xs'>
+        return `<div onclick="openTripDetails('${t.id}')" title="Clique para ver detalhes/editar" class='flex items-center gap-2.5 border border-slate-200 rounded-lg px-3 py-2 bg-white hover:border-[#007A33]/40 cursor-pointer transition-colors shadow-xs'>
           <div class='w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold text-[10px] shrink-0' style='background:${colorFor(t.owner)}'>${avatarImg(t.owner)}</div>
           <div class='min-w-0 flex-1'>
             <p class='text-[12px] font-extrabold text-slate-800 truncate'>${esc(normalizeName(t.owner))}</p>
@@ -1150,7 +1179,7 @@ document.addEventListener('click',e=>{
   if(!$('dest-box').contains(e.target)) $('airport-dropdown').classList.add('hidden');
 });
 
-['trip-modal','details-modal','report-modal'].forEach(id=>{
+['trip-modal','details-modal','report-modal','day-trips-modal','backup-modal'].forEach(id=>{
   const el=$(id);
   if(el) el.addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal(id)});
 });
@@ -1231,6 +1260,8 @@ function openTripDetails(id){
   const r=reports.find(x=>(x.tripId===id||x.id===id));
   const c=colorFor(t.owner);
 
+  const sameDayTrips = t.startDate ? trips.filter(x => inRange(x, t.startDate)) : [];
+
   $('details-title').textContent='Detalhes da viagem';
   $('details-content').innerHTML=`
     <div class='flex items-center gap-3 mb-5'>
@@ -1245,6 +1276,14 @@ function openTripDetails(id){
       <div class='bg-slate-50 border border-slate-100 rounded-lg p-3'><p class='lbl'>Retorno</p><p class='text-sm font-bold text-slate-800'>${fmt(t.endDate)} ${t.endTime||''}</p></div>
     </div>
     ${t.description?`<p class='lbl'>Descrição</p><p class='text-sm text-slate-600 whitespace-pre-wrap mb-4'>${esc(t.description)}</p>`:''}
+    ${sameDayTrips.length > 2 ? `
+      <div class='mb-4 p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between gap-2 text-xs'>
+        <span class='text-emerald-800 font-bold'>📅 Há ${sameDayTrips.length} pessoas viajando nesta data.</span>
+        <button type='button' onclick="closeModal('details-modal');openDayTripsModal('${t.startDate}')" class='btn btn-g text-xs py-1.5 px-3 font-bold shadow-xs'>
+          Ver todas do dia &rarr;
+        </button>
+      </div>
+    ` : ''}
     <div class='border-t border-slate-100 pt-4 flex flex-wrap gap-2 items-center'>
       ${r?`<button onclick="viewReport('${r.tripId||r.id}')" class='btn btn-o'>Ver relatório</button>`:''}
       ${canEdit(t)?`
@@ -1261,6 +1300,7 @@ function editTrip(id){
   const t=trips.find(x=>x.id===id);
   if(!canEdit(t)) return;
   closeModal('details-modal');
+  closeModal('day-trips-modal');
   openTripModal(t);
 }
 
@@ -1280,7 +1320,144 @@ function deleteTrip(id){
     fetch('/api/report/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
     refresh();
     closeModal('details-modal');
+    closeModal('day-trips-modal');
     showToast('Viagem excluída.');
+  }catch(err){
+    console.error(err);
+    alert('Não foi possível excluir a viagem.');
+  }
+}
+
+/* ===== MODAL DE VIAGENS DO DIA (QUANDO HÁ MÚLTIPLAS PESSOAS) ===== */
+function openDayTripsModal(iso){
+  const dayTrips = trips.filter(t => inRange(t, iso));
+  if(!dayTrips.length){
+    openTripModal(null, iso);
+    return;
+  }
+
+  // Ordena por horário de início e depois por nome do responsável
+  const sorted = [...dayTrips].sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||'') || a.owner.localeCompare(b.owner));
+
+  const [y, m, d] = iso.split('-');
+  const dt = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+  const diasSemana = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+  const diaSemana = diasSemana[dt.getDay()];
+  const dataFmt = `${d}/${m}/${y}`;
+
+  const titleEl = $('day-trips-title');
+  if(titleEl) titleEl.textContent = `Viagens em ${dataFmt}`;
+  const subEl = $('day-trips-subtitle');
+  if(subEl) subEl.textContent = `${diaSemana} • ${dayTrips.length} pessoas viajando`;
+
+  const listEl = $('day-trips-list');
+  if(listEl){
+    listEl.innerHTML = sorted.map(t => {
+      const c = colorFor(t.owner);
+      const rep = reports.find(r => (r.tripId === t.id || r.id === t.id));
+      const isOwner = normalizeName(t.owner) === currentUser;
+
+      return `
+        <div class='bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-4 shadow-sm transition-all flex flex-col gap-3' style='border-left: 5px solid ${c};'>
+          <div class='flex items-start justify-between gap-3'>
+            <div class='flex items-center gap-3 min-w-0'>
+              <div class='w-11 h-11 rounded-full overflow-hidden flex items-center justify-center text-white font-extrabold shrink-0 shadow-sm' style='background:${c}'>
+                ${avatarImg(t.owner)}
+              </div>
+              <div class='min-w-0'>
+                <div class='flex items-center gap-2 flex-wrap'>
+                  <p class='text-sm font-extrabold text-slate-800 leading-tight'>${esc(normalizeName(t.owner))}</p>
+                  ${isOwner ? `<span class='text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-1.5 py-0.5 font-bold'>Você</span>` : ''}
+                </div>
+                <p class='text-xs font-bold text-slate-600 flex items-center gap-1 mt-0.5'>
+                  <span class='text-slate-400'>Destino:</span>
+                  <span class='text-slate-800 font-extrabold'>${esc(t.title)}</span>
+                </p>
+              </div>
+            </div>
+            ${rep ? `<button type='button' onclick="closeModal('day-trips-modal');viewReport('${rep.tripId||rep.id}')" class='text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-full px-2.5 py-1 shrink-0 flex items-center gap-1 transition-colors'>📄 Relatório</button>` : ''}
+          </div>
+
+          <div class='grid grid-cols-2 gap-2 text-xs bg-slate-50 border border-slate-100 rounded-lg p-2.5'>
+            <div>
+              <span class='text-[10px] font-bold uppercase text-slate-400 block'>Ida</span>
+              <span class='font-bold text-slate-700'>${fmt(t.startDate)} ${t.startTime ? 'às ' + t.startTime : ''}</span>
+            </div>
+            <div>
+              <span class='text-[10px] font-bold uppercase text-slate-400 block'>Retorno</span>
+              <span class='font-bold text-slate-700'>${fmt(t.endDate || t.startDate)} ${t.endTime ? 'às ' + t.endTime : ''}</span>
+            </div>
+          </div>
+
+          ${t.description ? `
+            <div class='text-xs text-slate-600 bg-slate-50/70 rounded-lg p-2 border border-slate-100'>
+              <span class='text-[10px] font-bold uppercase text-slate-400 block mb-0.5'>Descrição</span>
+              <p class='whitespace-pre-wrap'>${esc(t.description)}</p>
+            </div>
+          ` : ''}
+
+          <div class='flex items-center justify-end gap-2 pt-2 border-t border-slate-100 flex-wrap'>
+            <button type='button' onclick="openTripDetailsFromDay('${t.id}')" class='btn btn-o text-xs py-1.5 px-3 flex items-center gap-1 font-semibold'>
+              👁️ Detalhes
+            </button>
+            <button type='button' onclick="editTripFromDay('${t.id}')" class='btn btn-g text-xs py-1.5 px-3.5 flex items-center gap-1 font-bold shadow-xs'>
+              ✏️ Editar viagem
+            </button>
+            <button type='button' onclick="deleteTripFromDay('${t.id}', '${iso}')" class='btn border border-red-200 text-red-500 hover:bg-red-50 text-xs py-1.5 px-2.5 flex items-center gap-1'>
+              🗑️ Excluir
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  const addBtn = $('day-trips-add-btn');
+  if(addBtn){
+    addBtn.onclick = () => {
+      closeModal('day-trips-modal');
+      openTripModal(null, iso);
+    };
+  }
+
+  openModal('day-trips-modal');
+}
+
+function editTripFromDay(id){
+  const t = trips.find(x => x.id === id);
+  if(!t) return;
+  closeModal('day-trips-modal');
+  openTripModal(t);
+}
+
+function openTripDetailsFromDay(id){
+  closeModal('day-trips-modal');
+  openTripDetails(id);
+}
+
+function deleteTripFromDay(id, iso){
+  const t = trips.find(x => x.id === id);
+  if(!t || !confirm('Excluir a viagem para ' + t.title + ' (' + normalizeName(t.owner) + ')?')) return;
+  try{
+    reports.filter(r => (r.tripId === id || r.id === id)).forEach(r => [...(r.photos || []), ...(r.attachments || [])].forEach(f => { if(f.id) delFile(f.id); }));
+    const nt = trips.filter(x => x.id !== id);
+    const nr = reports.filter(r => r.tripId !== id && r.id !== id);
+    save(KEY_TRIPS, nt);
+    save(KEY_REPORTS, nr);
+    trips = nt;
+    reports = nr;
+    syncTripsToServer(nt);
+    fetch('/api/trip/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+    fetch('/api/report/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+    refresh();
+    showToast('Viagem excluída.');
+
+    const remaining = trips.filter(x => inRange(x, iso));
+    if(remaining.length > 0){
+      openDayTripsModal(iso);
+    } else {
+      closeModal('day-trips-modal');
+    }
   }catch(err){
     console.error(err);
     alert('Não foi possível excluir a viagem.');
@@ -1749,7 +1926,8 @@ Object.assign(window,{
   openReportModal,viewReport,editTrip,deleteTrip,renderSummary,
   setMapDate,changeMapDay,resetMapToToday,toggleMapExpand,
   quickSelect,
-  setReportMonth,changeReportMonth,setReportMonthToday,toggleReportAllMonths
+  setReportMonth,changeReportMonth,setReportMonthToday,toggleReportAllMonths,
+  openDayTripsModal,editTripFromDay,openTripDetailsFromDay,deleteTripFromDay
 });
 
 /* Inicialização */
